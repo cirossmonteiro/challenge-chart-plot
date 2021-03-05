@@ -4,13 +4,60 @@ import './App.css';
 import { start } from 'repl';
 import { Line } from '@reactchartjs/react-chart.js'
 
+interface IBasicLine {
+  type: 'start' | 'data' | 'span' | 'stop',
+  timestamp: number,
+}
+
+interface IStart extends IBasicLine {
+  select: string[],
+  group: string[]
+}
+
+interface ISpan extends IBasicLine {
+  begin: number,
+  end: number
+}
+
+interface IData extends IBasicLine {
+  [key: string]: any
+}
+
+interface IStop extends IBasicLine {
+
+}
+
+type TGenericLine = IStart | ISpan | IData | IStop;
+
 
 interface IState {
-  entryData: string
+  entryData: string,
+  currentIndex: number,
+  plotData: {
+    labels: string[],
+    datasets: { label: string, data: number[] }[]
+  },
+  begin: number | null,
+  end: number | null,
+  groups: { [key: string]: string[] },
+  stopped: boolean,
+  groupNames: string[]
+  valueNames: string[],
 }
 
 const initialState: IState = {
-  entryData: ''
+  entryData: '',
+  currentIndex: 0,
+  plotData: {
+    labels: [],
+    datasets: []
+  },
+  begin: null,
+  end: null,
+  groups: {},
+  stopped: true,
+  groupNames: [],
+  valueNames: []
 }
 
 const sleep = (ms: number) => {
@@ -27,7 +74,7 @@ const randInt = (a: number, b: number) => Math.round(randInterval(a,b));
 
 const newArray = (size: number) => Array.apply(null, Array(size));
 
-const generateInputData = async (concatString: (message: string) => void, dt: number) => {
+const generateInputData = async (concatString: (message: string) => void, dt: number = 500, iterations: number = 10) => {
   const numGroups = randInt(2,2);
   const numValues = randInt(2,2); // storing values associated to each object create above
   const group: any = {}; // storing all options for all groups
@@ -46,6 +93,13 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
     timestamp: currentTimestamp,
     select: nameValues,
     group: groups.slice(0)
+  }
+
+  const spanData = {
+    type: 'span',
+    timestamp: currentTimestamp,
+    begin: currentTimestamp,
+    end: currentTimestamp+5*1000
   }
 
   concatString(JSON.stringify(startData));
@@ -101,13 +155,17 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
     timestamp: currentTimestamp + 201*1000
   }
 
-  while(true) {
+  for(let k = 0; k < iterations; k++) {
     const arrayToSend = iterate();
     // const arrayToSend = [startData, ...combinations, stopData];
     const message = arrayToSend.map(item => JSON.stringify(item)).join('\n');
     concatString(message);
     await sleep(dt);
   }
+
+  const message = JSON.stringify(stopData);
+  concatString(message);
+
 }
 
 // const generateInputDataWrapper = (function: any) => 
@@ -122,82 +180,130 @@ const App = () => {
     generateInputData((message: string) => setState(state => ({...state, entryData: state.entryData+(state.entryData ? '\n' : '')+message})), 1000);
   }, []);
 
-  const data = useMemo(() => {
+  useEffect(() => {
     // const datasets = [];
     // const groups: any = {};
     // console.log(113, entryData, entryData.split('\n'));
-    if (entryData === '')
-      return;      
-    const lines = entryData.split('\n').map(line => JSON.parse(line));
-    if (lines.length === 0)
-      return;
-    let startData: any = {}, groups: any = {}, datasets: any = {}, begin: number= -1, end: number = -1, labels: number[] = [], stopped = false;
-    lines.forEach(line => {
-      switch(line.type) {
 
-        case 'start':
-          startData = { ...line };
-          groups = {};
-          datasets = {};
-          begin = 0;
-          end = 0;
-          labels = [];
-          startData.group.forEach((g: string) => {
-            groups[g] = [];
-          });
-          break;
+    setState(state => {
+      let { currentIndex, groups, plotData, begin, end, stopped, valueNames, groupNames } = state;
+      let { labels, datasets } = plotData;
 
-        case 'span':
-          begin = line.begin;
-          end = line.end;
-          break;
+      if (entryData === '')
+        return state;
 
-        case 'data':
-          if (begin && end && (line.timestamp < begin || line.timestamp > end) || stopped)
+      const lines: TGenericLine[] = entryData.slice(currentIndex).split('\n')
+                      .filter(line => line !== '').map(line => JSON.parse(line));
+      if (lines.length === 0)
+        return state;
+
+      // let startData: any = {}, groups: any = {}, datasets: any = {}, begin: number= -1, end: number = -1, labels: number[] = [], stopped = false;
+      lines.forEach(line => {
+        switch(line.type) {
+
+          case 'start':
+            
+            // const startData = { ...line };
+            groups = {};
+            // begin = line.timestamp;
+            // end = line.timestamp;
+            // labels = [];
+            groupNames = (line as IStart).group.slice(0);
+            groupNames.forEach((g: string) => {
+              groups[g] = [];
+            });
+            // plotData = { ...initialState.plotData };
+            valueNames = (line as IStart).select.slice(0);
+            plotData = {
+              labels: [],
+              datasets: []
+            }
+            stopped = false;
             break;
-          startData.group.forEach((g: string) => {
-            if (!groups[g].includes(line[g])) {
-              groups[g].push(line[g]);
-            }
-          });
-          // TODO: break nameValue by underscores and apply capital letters
-          const lineNames = startData.select.map((nameValue: string) => [...startData.group.map((g: string) => line[g]), nameValue].join(' '));
-          lineNames.forEach((lineName: string, index: number) => {
-            if (datasets[lineName]) {
-              datasets[lineName].push(line[startData.select[index]]);
-            } else {
-              datasets[lineName] = [line[startData.select[index]]];
-            }
-          });
-          if (!labels.includes(line.timestamp))
-            labels.push(line.timestamp);
-          break;
 
-        case 'stop':
-          break;
+          case 'span':
+            begin = (line as ISpan).begin;
+            end = (line as ISpan).end;
+            break;
 
-        default:
-          console.error('Bad type: ', line.type);
-          break;
+          case 'data':
+            if (begin && end && (line.timestamp < begin || line.timestamp > end) || stopped)
+              break;
+            groupNames.forEach((g: string) => {
+              if (!groups[g].includes((line as IData)[g])) {
+                groups[g].push((line as IData)[g]);
+              }
+            });
+            // TODO: break nameValue by underscores and apply capital letters
+            // const lineNames = valueNames.map((valueName: string) => [...groupNames.map((g: string) => (line as IData)[g]), valueName].join(' '));
+            console.log(232, valueNames);
+            for (const valueName of valueNames) {
+              const lineName = [...groupNames.map((g: string) => (line as IData)[g]), valueName].join(' ');
+              console.log(242, groupNames, lineName);
+              const index = datasets.findIndex(dataset => dataset.label === lineName);
+              if (index === -1) {
+                datasets.push({
+                  label: lineName,
+                  data: []
+                });
+              } else {
+                datasets[index].data.push((line as IData)[valueName]);
+              }
+            }
+            // lineNames.forEach(lineName => {
+            //   const index = datasets.findIndex(dataset => dataset.label === lineName);
+            //   const index2 = valueNames
+            //   if (index === -1) {
+            //     datasets.push({
+            //       label: lineName,
+            //       data: []
+            //     })
+            //   }
+            // })
+            if (!labels.includes(String(line.timestamp)))
+              labels.push(String(line.timestamp));
+            break;
+
+          case 'stop':
+            stopped = true;
+            break;
+
+          default:
+            console.error('Bad type: ', line.type);
+            break;
+        }
+        
+      });
+      plotData = { labels, datasets };
+      return {
+        ...state,
+        currentIndex: entryData.length,
+        groups, groupNames, valueNames,
+        begin, end,
+        plotData, stopped
       }
-      
     });
 
-    return {
-      // type: 'line',
-      labels: labels.map((time: number) => (new Date(time).toISOString())),
-      datasets: Object.keys(datasets).map((key: string) => ({label: key, data: datasets[key]}))
-    };
 
-  }, [entryData]) || {};
+    // setState(state => ({...state, currentIndex: entryData.length}));
+
+    // return {
+    //   // type: 'line',
+    //   labels: labels.map((time: number) => (new Date(time).toISOString())),
+    //   datasets: Object.keys(datasets).map((key: string) => ({label: key, data: datasets[key]}))
+    // };
+
+  }, [entryData]);
 
   // console.log(22, data);
   const options = {};
 
+  console.log(293, state.plotData);
+
   return (
     <div className="app-root">
       <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
-      <Line type='line' data={data} options={options} />
+      <Line type='line' data={state.plotData} options={options} />
     </div>
   );
 }
