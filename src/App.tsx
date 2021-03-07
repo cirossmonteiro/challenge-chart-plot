@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import logo from './logo.svg';
-import './App.css';
-import { start } from 'repl';
-import { Line } from '@reactchartjs/react-chart.js'
+import './App.scss';
+// import { Line } from '@reactchartjs/react-chart.js'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface IBasicLine {
   type: 'start' | 'data' | 'span' | 'stop',
@@ -34,8 +33,8 @@ interface IState {
   entryData: string,
   currentIndex: number,
   plotData: {
-    labels: string[],
-    datasets: { label: string, data: number[] }[]
+    labels: number[],
+    datasets: { label: string, data: number[], lineTension: number, fill: boolean, borderColor?: string}[],
   },
   begin: number | null,
   end: number | null,
@@ -43,6 +42,8 @@ interface IState {
   stopped: boolean,
   groupNames: string[]
   valueNames: string[],
+  dragging: boolean,
+  dragHeight: number // unit %
 }
 
 const initialState: IState = {
@@ -50,14 +51,23 @@ const initialState: IState = {
   currentIndex: 0,
   plotData: {
     labels: [],
-    datasets: []
+    datasets: [],
   },
   begin: null,
   end: null,
   groups: {},
   stopped: true,
   groupNames: [],
-  valueNames: []
+  valueNames: [],
+  dragging: false,
+  dragHeight: 30
+}
+
+const randomColor = () => {
+  const letters = '0123456789ABCDEF';
+  const color = '#' + [0,1,2,3,4,5].map(_ => letters[Math.floor(Math.random() * 16)]).join('');
+  console.log(66, color);
+  return color;
 }
 
 const sleep = (ms: number) => {
@@ -216,7 +226,7 @@ const App = () => {
             valueNames = (line as IStart).select.slice(0);
             plotData = {
               labels: [],
-              datasets: []
+              datasets: [],
             }
             stopped = false;
             break;
@@ -244,7 +254,10 @@ const App = () => {
               if (index === -1) {
                 datasets.push({
                   label: lineName,
-                  data: []
+                  data: [],
+                  lineTension: 0,
+                  fill: false,
+                  borderColor: randomColor()
                 });
               } else {
                 datasets[index].data.push((line as IData)[valueName]);
@@ -260,8 +273,9 @@ const App = () => {
             //     })
             //   }
             // })
-            if (!labels.includes(String(line.timestamp)))
-              labels.push(String(line.timestamp));
+            if (!labels.includes(line.timestamp))
+              labels.push(line.timestamp);
+              // labels.push(`${new Date(line.timestamp).getHours()}:${new Date(line.timestamp).getMinutes()}:${new Date(line.timestamp).getSeconds()}`);
             break;
 
           case 'stop':
@@ -296,14 +310,94 @@ const App = () => {
   }, [entryData]);
 
   // console.log(22, data);
-  const options = {};
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    legend: {
+        display: false,
+        // position: 'right'
+    },
+    legendCallback: function(chart: any) {
+      console.log(318, chart)
+        // Return the HTML string here.
+    },
+    scales: {
+        yAxes: [{
+            ticks: {
+                beginAtZero: true
+            }
+        }],
+        xAxes: [{
+            type: 'time',
+            time: {
+                unit: 'second'
+            }
+        }],
+    }
+  };
 
   console.log(293, state.plotData);
 
+  const legendHTML = state.plotData.datasets.map(dataset => (
+    <div className="legend-item d-flex align-items-center">
+      <div className="legend-circle mr-1" style={{background: dataset.borderColor}}></div>
+      <span style={{color: dataset.borderColor}}>{dataset.label}</span>
+    </div>
+  ));
+
+  const plotData2 = useMemo(() => {
+    if (state.plotData.datasets.length === 0)
+      return []
+    const data = [], nPoints = state.plotData.datasets[0].data.length;
+    for (let k = 0; k < nPoints; k++) {
+      const point: any = {name: state.plotData.labels[k]};
+      state.plotData.datasets.forEach(dataset => {
+        point[dataset.label] = dataset.data[k];
+      });
+      data.push(point);
+    }
+    return data
+  }, [state.plotData]);
+
+  console.log(362, state.dragging, state.dragHeight);
+
   return (
     <div className="app-root">
-      <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
-      <Line type='line' data={state.plotData} options={options} />
+      <div className="app-header d-flex align-items-center">
+        <h1>Ciro's Challenge</h1>
+      </div>
+      <div className="app-body" onDrop={_ => setState(state => ({...state, dragging: false}))}>
+        <div className="app-textarea-holder" style={{height: `${state.dragHeight}%`}}>
+          <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
+          <div className="drag-box d-flex flex-column justify-content-center align-items-center" draggable="true" onDrag={e => {
+            console.log(362, 'computing', e.clientY, window.screen.availHeight);
+            // console.log(362, e.clientY, e.pageY, e.screenY, e.nativeEvent.offsetY);
+            if (state.dragging && e.clientY !== 0)
+              setState(state => ({...state, dragHeight: (e.clientY)/window.screen.availHeight*100}));
+          }} onDragStart={_ => setState(state => ({...state, dragging: true}))}>
+            <div className="drag-line mb-1"></div>
+            <div className="drag-line"></div>
+          </div>
+        </div>
+        <div className="app-graph d-flex" style={{maxHeight: `${100-state.dragHeight}%`, height: `${100-state.dragHeight}%`}}>
+          {/* <Line type='line' data={state.plotData} options={options} /> */}
+          <div className="app-graph-holder">
+            <ResponsiveContainer>
+              <LineChart data={plotData2}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" />
+                <Tooltip />
+                {state.plotData.datasets.map(dataset => <Line type="monotone" dataKey={String(dataset.label)} stroke={dataset.borderColor} />)}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="legend-container d-flex flex-column">{legendHTML}</div>
+        </div>
+      </div>
+      <div className="app-footer pl-5 d-flex align-items-center">
+        <button className="btn btn-primary">GENERATE CHART</button>
+      </div>
     </div>
   );
 }
