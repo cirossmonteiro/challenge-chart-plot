@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.scss';
 // import { Line } from '@reactchartjs/react-chart.js'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -34,7 +34,7 @@ interface IState {
   currentIndex: number,
   plotData: {
     labels: number[],
-    datasets: { label: string, data: number[], lineTension: number, fill: boolean, borderColor?: string}[],
+    datasets: { label: string, data: number[], borderColor?: string}[],
   },
   begin: number | null,
   end: number | null,
@@ -66,7 +66,6 @@ const initialState: IState = {
 const randomColor = () => {
   const letters = '0123456789ABCDEF';
   const color = '#' + [0,1,2,3,4,5].map(_ => letters[Math.floor(Math.random() * 16)]).join('');
-  console.log(66, color);
   return color;
 }
 
@@ -92,8 +91,6 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
   const nameValues = newArray(numValues).map((_, index) => `v${index}`);
   const currentTimestamp = Date.now();
 
-  
-
   for (const g of groups) {
     group[g] = newArray(randInt(2,2)).map((_, index) => `${g}option${index}`); // initializing a randomly-sized array for options of a group
   }
@@ -114,15 +111,11 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
 
   concatString(JSON.stringify(startData));
 
-  console.log(41, 'Groups: ', groups);
-
-  console.log(42, 'Group object: ', group);
-
   const iterate = () => {
     const timestamp = Date.now();
-      // each line is a combination of groups
+
+    // each line in chart is a combination of groups with variable names
     let combinations: any[] = [{type: 'data'}];
-    // let combinations: any[] = group[groups[0]].map((option: string) => ({[groups[0]]: option}));
     for (let k = 0; k < numGroups; k++) {
       let newCombinations: any[] = [];
       const currentGroup = group[groups[k]];
@@ -139,26 +132,11 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
       for (const nameValue of nameValues) {
         combinations[k][nameValue] = randInterval(0,5);
       }
-      // combinations[k].timestamp = (1614813534 + randInt(-1000, 1000))*1000;
       combinations[k].timestamp = timestamp;
     }
 
     return combinations;
   }
-
-  
-
-  // const numSpans = randInt(0, Math.floor(combinations.length/3));
-  // const spans = (numSpans === 0 ? [] : [randInt(1, combinations.length-1)]);
-  // for (let k = 1; k < numSpans; k++)
-  //   spans.push(randInt(spans[spans.length-1]+1, combinations.length-1));
-
-  // spans.forEach(index => combinations.splice(index, 0, ({
-  //   type: 'span',
-  //   timestamp: currentTimestamp,
-  //   begin: currentTimestamp + randInt(0, 100)*1000,
-  //   end: currentTimestamp + randInt(101, 200)*1000
-  // })));
 
   const stopData = {
     type: 'stop',
@@ -167,7 +145,6 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
 
   for(let k = 0; k < iterations; k++) {
     const arrayToSend = iterate();
-    // const arrayToSend = [startData, ...combinations, stopData];
     const message = arrayToSend.map(item => JSON.stringify(item)).join('\n');
     concatString(message);
     await sleep(dt);
@@ -178,22 +155,22 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
 
 }
 
-// const generateInputDataWrapper = (function: any) => 
-
 
 const App = () => {
 
   const [state, setState] = useState<IState>(initialState);
   const { entryData } = state;
 
-  useEffect(() => {
-    generateInputData((message: string) => setState(state => ({...state, entryData: state.entryData+(state.entryData ? '\n' : '')+message})), 1000);
+  const startGeneratingData = useCallback(() => {
+    generateInputData((message: string) =>
+      setState(state => ({...state, entryData: state.entryData+(state.entryData ? '\n' : '')+message})), 1000);
   }, []);
 
   useEffect(() => {
-    // const datasets = [];
-    // const groups: any = {};
-    // console.log(113, entryData, entryData.split('\n'));
+    startGeneratingData();
+  }, []);
+
+  useEffect(() => {
 
     setState(state => {
       let { currentIndex, groups, plotData, begin, end, stopped, valueNames, groupNames } = state;
@@ -207,22 +184,15 @@ const App = () => {
       if (lines.length === 0)
         return state;
 
-      // let startData: any = {}, groups: any = {}, datasets: any = {}, begin: number= -1, end: number = -1, labels: number[] = [], stopped = false;
       lines.forEach(line => {
         switch(line.type) {
 
           case 'start':
-            
-            // const startData = { ...line };
             groups = {};
-            // begin = line.timestamp;
-            // end = line.timestamp;
-            // labels = [];
             groupNames = (line as IStart).group.slice(0);
             groupNames.forEach((g: string) => {
               groups[g] = [];
             });
-            // plotData = { ...initialState.plotData };
             valueNames = (line as IStart).select.slice(0);
             plotData = {
               labels: [],
@@ -244,35 +214,20 @@ const App = () => {
                 groups[g].push((line as IData)[g]);
               }
             });
-            // TODO: break nameValue by underscores and apply capital letters
-            // const lineNames = valueNames.map((valueName: string) => [...groupNames.map((g: string) => (line as IData)[g]), valueName].join(' '));
-            console.log(232, valueNames);
             for (const valueName of valueNames) {
-              const lineName = [...groupNames.map((g: string) => (line as IData)[g]), valueName].join(' ');
-              console.log(242, groupNames, lineName);
+              const prettyValueName = valueName.split('_').join(' ');
+              const lineName = [...groupNames.map((g: string) => (line as IData)[g]), prettyValueName].join(' ');
               const index = datasets.findIndex(dataset => dataset.label === lineName);
               if (index === -1) {
                 datasets.push({
                   label: lineName,
                   data: [],
-                  lineTension: 0,
-                  fill: false,
                   borderColor: randomColor()
                 });
               } else {
                 datasets[index].data.push((line as IData)[valueName]);
               }
             }
-            // lineNames.forEach(lineName => {
-            //   const index = datasets.findIndex(dataset => dataset.label === lineName);
-            //   const index2 = valueNames
-            //   if (index === -1) {
-            //     datasets.push({
-            //       label: lineName,
-            //       data: []
-            //     })
-            //   }
-            // })
             if (!labels.includes(line.timestamp))
               labels.push(line.timestamp);
               // labels.push(`${new Date(line.timestamp).getHours()}:${new Date(line.timestamp).getMinutes()}:${new Date(line.timestamp).getSeconds()}`);
@@ -298,52 +253,14 @@ const App = () => {
       }
     });
 
-
-    // setState(state => ({...state, currentIndex: entryData.length}));
-
-    // return {
-    //   // type: 'line',
-    //   labels: labels.map((time: number) => (new Date(time).toISOString())),
-    //   datasets: Object.keys(datasets).map((key: string) => ({label: key, data: datasets[key]}))
-    // };
-
   }, [entryData]);
 
-  // console.log(22, data);
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    legend: {
-        display: false,
-        // position: 'right'
-    },
-    legendCallback: function(chart: any) {
-      console.log(318, chart)
-        // Return the HTML string here.
-    },
-    scales: {
-        yAxes: [{
-            ticks: {
-                beginAtZero: true
-            }
-        }],
-        xAxes: [{
-            type: 'time',
-            time: {
-                unit: 'second'
-            }
-        }],
-    }
-  };
-
-  console.log(293, state.plotData);
-
-  const legendHTML = state.plotData.datasets.map(dataset => (
+  const legendHTML = useMemo(() => state.plotData.datasets.map(dataset => (
     <div className="legend-item d-flex align-items-center">
       <div className="legend-circle mr-1" style={{background: dataset.borderColor}}></div>
       <span style={{color: dataset.borderColor}}>{dataset.label}</span>
     </div>
-  ));
+  )), [state.plotData]);
 
   const plotData2 = useMemo(() => {
     if (state.plotData.datasets.length === 0)
@@ -359,7 +276,10 @@ const App = () => {
     return data
   }, [state.plotData]);
 
-  console.log(362, state.dragging, state.dragHeight);
+  const onDrag = useCallback(e => {
+    if (state.dragging && e.clientY !== 0)
+      setState(state => ({...state, dragHeight: (e.clientY)/window.screen.availHeight*100}));
+  }, [state.dragging]);
 
   return (
     <div className="app-root">
@@ -369,18 +289,13 @@ const App = () => {
       <div className="app-body" onDrop={_ => setState(state => ({...state, dragging: false}))}>
         <div className="app-textarea-holder" style={{height: `${state.dragHeight}%`}}>
           <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
-          <div className="drag-box d-flex flex-column justify-content-center align-items-center" draggable="true" onDrag={e => {
-            console.log(362, 'computing', e.clientY, window.screen.availHeight);
-            // console.log(362, e.clientY, e.pageY, e.screenY, e.nativeEvent.offsetY);
-            if (state.dragging && e.clientY !== 0)
-              setState(state => ({...state, dragHeight: (e.clientY)/window.screen.availHeight*100}));
-          }} onDragStart={_ => setState(state => ({...state, dragging: true}))}>
+          <div className="drag-box d-flex flex-column justify-content-center align-items-center" draggable="true"
+            onDrag={onDrag} onDragStart={_ => setState(state => ({...state, dragging: true}))}>
             <div className="drag-line mb-1"></div>
             <div className="drag-line"></div>
           </div>
         </div>
         <div className="app-graph d-flex" style={{maxHeight: `${100-state.dragHeight}%`, height: `${100-state.dragHeight}%`}}>
-          {/* <Line type='line' data={state.plotData} options={options} /> */}
           <div className="app-graph-holder">
             <ResponsiveContainer>
               <LineChart data={plotData2}>
@@ -396,7 +311,7 @@ const App = () => {
         </div>
       </div>
       <div className="app-footer pl-5 d-flex align-items-center">
-        <button className="btn btn-primary">GENERATE CHART</button>
+        <button className="btn btn-primary" onClick={startGeneratingData} disabled={!state.stopped}>GENERATE CHART</button>
       </div>
     </div>
   );
