@@ -5,7 +5,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 
 interface IBasicLine {
   type: 'start' | 'data' | 'span' | 'stop',
-  timestamp: number,
+  timestamp: string | number,
 }
 
 interface IStart extends IBasicLine {
@@ -33,7 +33,7 @@ interface IState {
   entryData: string,
   currentIndex: number,
   plotData: {
-    labels: number[],
+    labels: (number | string)[],
     datasets: { label: string, data: number[], borderColor?: string}[],
   },
   begin: number | null,
@@ -124,8 +124,6 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
       }
       combinations = newCombinations.slice(0);
     }
-
-    console.log(43, 'Combinations: ', combinations.length);
 
     // assigning values and a timestamp for each line
     for (let k = 0; k < combinations.length; k++) {
@@ -228,9 +226,13 @@ const App = () => {
                 datasets[index].data.push((line as IData)[valueName]);
               }
             }
-            if (!labels.includes(line.timestamp))
-              labels.push(line.timestamp);
-              // labels.push(`${new Date(line.timestamp).getHours()}:${new Date(line.timestamp).getMinutes()}:${new Date(line.timestamp).getSeconds()}`);
+            if (!labels.includes(line.timestamp)) {
+              // labels.push(line.timestamp);
+              let hour = new Date(line.timestamp).getHours(),
+                    minute = new Date(line.timestamp).getMinutes(),
+                    second = new Date(line.timestamp).getSeconds();
+              labels.push(`${hour < 10 ? `0${hour}` : hour}:${minute < 10 ? `0${minute}` : minute}:${second < 10 ? `0${second}` : second}`); 
+            }
             break;
 
           case 'stop':
@@ -256,8 +258,8 @@ const App = () => {
   }, [entryData]);
 
   const legendHTML = useMemo(() => state.plotData.datasets.map(dataset => (
-    <div className="legend-item d-flex align-items-center">
-      <div className="legend-circle mr-1" style={{background: dataset.borderColor}}></div>
+    <div className="legend-item d-flex align-items-center mb-1">
+      <div className="legend-circle mr-2" style={{background: dataset.borderColor}}></div>
       <span style={{color: dataset.borderColor}}>{dataset.label}</span>
     </div>
   )), [state.plotData]);
@@ -287,8 +289,11 @@ const App = () => {
         <h1>Ciro's Challenge</h1>
       </div>
       <div className="app-body" onDrop={_ => setState(state => ({...state, dragging: false}))}>
-        <div className="app-textarea-holder" style={{height: `${state.dragHeight}%`}}>
-          <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
+        <div className="app-textarea-container d-flex" style={{height: `${state.dragHeight}%`}}>
+          <div className="app-textarea-sidebar"></div>
+          <div className="app-textarea-holder">
+            <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
+          </div>
           <div className="drag-box d-flex flex-column justify-content-center align-items-center" draggable="true"
             onDrag={onDrag} onDragStart={_ => setState(state => ({...state, dragging: true}))}>
             <div className="drag-line mb-1"></div>
