@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.scss';
-// import { Line } from '@reactchartjs/react-chart.js'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface IBasicLine {
@@ -164,9 +163,10 @@ const App = () => {
       setState(state => ({...state, entryData: state.entryData+(state.entryData ? '\n' : '')+message})), 1000);
   }, []);
 
-  useEffect(() => {
-    startGeneratingData();
-  }, []);
+  // use this to automate data generating for hot reloading
+  // useEffect(() => {
+  //   startGeneratingData();
+  // }, []);
 
   useEffect(() => {
 
