@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { DragEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
 import './App.scss';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface IBasicLine {
   type: 'start' | 'data' | 'span' | 'stop',
-  timestamp: string | number,
+  timestamp: number,
 }
 
 interface IStart extends IBasicLine {
@@ -278,7 +278,7 @@ const App = () => {
     return data
   }, [state.plotData]);
 
-  const onDrag = useCallback(e => {
+  const onDrag = useCallback((e: any) => {
     if (state.dragging && e.clientY !== 0)
       setState(state => ({...state, dragHeight: (e.clientY)/window.screen.availHeight*100}));
   }, [state.dragging]);
