@@ -1,6 +1,7 @@
-import React, { DragEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
-import './App.scss';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+import './App.scss';
 
 interface IBasicLine {
   type: 'start' | 'data' | 'span' | 'stop',
@@ -29,7 +30,6 @@ type TGenericLine = IStart | ISpan | IData | IStop;
 
 
 interface IState {
-  entryData: string,
   currentIndex: number,
   plotData: {
     labels: (number | string)[],
@@ -41,12 +41,9 @@ interface IState {
   stopped: boolean,
   groupNames: string[]
   valueNames: string[],
-  dragging: boolean,
-  dragHeight: number // unit %
 }
 
 const initialState: IState = {
-  entryData: '',
   currentIndex: 0,
   plotData: {
     labels: [],
@@ -58,8 +55,6 @@ const initialState: IState = {
   stopped: true,
   groupNames: [],
   valueNames: [],
-  dragging: false,
-  dragHeight: 30
 }
 
 const randomColor = () => {
@@ -72,9 +67,10 @@ const sleep = (ms: number) => {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const os = ['linux', 'mac'];
+
+/* const os = ['linux', 'mac'];
 const browser = ['chrome', 'firefox'];
-const groups: any = { os, browser };
+const groups: any = { os, browser }; */
 
 const randInterval = (a: number, b: number) => (b-a)*Math.random()+a;
 
@@ -101,12 +97,12 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
     group: groups.slice(0)
   }
 
-  const spanData = {
+  /* const spanData = {
     type: 'span',
     timestamp: currentTimestamp,
     begin: currentTimestamp,
     end: currentTimestamp+5*1000
-  }
+  } */
 
   concatString(JSON.stringify(startData));
 
@@ -152,15 +148,15 @@ const generateInputData = async (concatString: (message: string) => void, dt: nu
 
 }
 
-
 const App = () => {
-
+  const [entryData, setEntryData] = useState<string>("");
+  const [dragging, setDragging] = useState<boolean>(false);
+  const [dragHeight, setDragHeight] = useState<number>(30);
   const [state, setState] = useState<IState>(initialState);
-  const { entryData } = state;
 
   const startGeneratingData = useCallback(() => {
     generateInputData((message: string) =>
-      setState(state => ({...state, entryData: state.entryData+(state.entryData ? '\n' : '')+message})), 1000);
+      setEntryData(ed => ed+(ed ? '\n' : '')+message), 1000);
   }, []);
 
   // use this to automate data generating for hot reloading
@@ -279,28 +275,28 @@ const App = () => {
   }, [state.plotData]);
 
   const onDrag = useCallback((e: any) => {
-    if (state.dragging && e.clientY !== 0)
-      setState(state => ({...state, dragHeight: (e.clientY)/window.screen.availHeight*100}));
-  }, [state.dragging]);
+    if (dragging && e.clientY !== 0)
+      setDragHeight(e.clientY/window.screen.availHeight*100);
+  }, [dragging]);
 
   return (
     <div className="app-root">
       <div className="app-header d-flex align-items-center">
         <h1>Ciro's Challenge</h1>
       </div>
-      <div className="app-body" onDrop={_ => setState(state => ({...state, dragging: false}))}>
-        <div className="app-textarea-container d-flex" style={{height: `${state.dragHeight}%`}}>
+      <div className="app-body" onDrop={_ => setDragging(false)}>
+        <div className="app-textarea-container d-flex" style={{height: `${dragHeight}%`}}>
           <div className="app-textarea-sidebar"></div>
           <div className="app-textarea-holder">
-            <textarea value={entryData} onChange={e => setState(state => ({...state, entryData: e.target.value}))}/>
+            <textarea value={entryData} onChange={e => setEntryData(e.target.value)}/>
           </div>
           <div className="drag-box d-flex flex-column justify-content-center align-items-center" draggable="true"
-            onDrag={onDrag} onDragStart={_ => setState(state => ({...state, dragging: true}))}>
+            onDrag={onDrag} onDragStart={_ => setDragging(true)}>
             <div className="drag-line mb-1"></div>
             <div className="drag-line"></div>
           </div>
         </div>
-        <div className="app-graph d-flex" style={{maxHeight: `${100-state.dragHeight}%`, height: `${100-state.dragHeight}%`}}>
+        <div className="app-graph d-flex" style={{maxHeight: `${100-dragHeight}%`, height: `${100-dragHeight}%`}}>
           <div className="app-graph-holder">
             <ResponsiveContainer>
               <LineChart data={plotData2}>
